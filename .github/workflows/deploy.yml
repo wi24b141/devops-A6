@@ -1,0 +1,195 @@
+name: CI/CD Deployment Pipeline
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate dynamic version
+        id: version
+        run: |
+          VERSION="$(date +%Y%m%d)-$(git rev-parse --short HEAD)"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Generated version: $VERSION"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Lint
+        run: |
+          bun install
+          bun run lint:commit
+
+      - name: Install and Build
+        run: |
+          bun install
+          bun run build
+          zip -r build.zip dist/ action.yml package.json README.md
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: build.zip
+          retention-days: 5
+
+  test-unit:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      TEST_ENV: staging
+    outputs:
+      version: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run unit tests
+        run: bun run test:unit
+
+  test-integration:
+    needs: test-unit
+    runs-on: ubuntu-latest
+    env:
+      TEST_ENV: staging
+    outputs:
+      version: ${{ needs.test-unit.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run integration tests
+        run: bun run test:integration
+
+  generate-release-notes:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+
+      - name: Generate release notes with Copilot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          copilot -p "Look at the last 10 commits in this repository. Write a short, clear release-notes summary in Markdown. Include a bullet list of the most important changes and a one-paragraph overview. Save the result to release-notes.md" \
+            --allow-tool='shell(git:*)' \
+            --allow-tool=write \
+            --no-ask-user
+          echo "--- Agent finished ---"
+          cat release-notes.md || echo "No file generated"
+
+      - name: Upload release notes artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: copilot-release-notes
+          path: release-notes.md
+          retention-days: 5
+          if-no-files-found: warn          
+
+  deploy-staging:
+    needs: test-integration
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+
+      - name: Create Staging Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BASE_TAG: ${{ vars.BUILD_TAG }}
+          VERSION: ${{ needs.test-integration.outputs.version }}
+          NOTE: ${{ vars.RELEASE_NOTE }}
+        run: |
+          TAG="${BASE_TAG}-${VERSION}"
+          echo "Creating release with tag: $TAG"
+          gh release create "$TAG" build.zip \
+            --notes "$NOTE" \
+            --title "Staging Release $TAG" \
+            --repo "$GH_REPO"
+
+  deploy-production:
+    needs: [test-integration, deploy-staging, generate-release-notes]
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+
+      - name: Create Production Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BASE_TAG: ${{ vars.BUILD_TAG }}
+          VERSION: ${{ needs.test-integration.outputs.version }}
+          NOTE: ${{ vars.RELEASE_NOTE }}
+        run: |
+          TAG="${BASE_TAG}-${VERSION}"
+          echo "Creating release with tag: $TAG"
+          gh release create "$TAG" build.zip \
+            --notes "$NOTE" \
+            --title "Production Release $TAG" \
+            --repo "$GH_REPO"
+
+  notify-on-failure:
+    needs: [test-unit, test-integration]
+    if: failure() && (needs.test-unit.result == 'failure' || needs.test-integration.result == 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Create issue on test failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `Tests failed on ${new Date().toISOString().slice(0, 10)}`;
+            const body = `Automated test failure detected in run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}\n\nPlease investigate.`;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['bug', 'ci-failure']
+            });
