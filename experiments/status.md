@@ -8,4 +8,4 @@ Updated: no
 Meeting: Wednesday
 
 ## Tasks
-Task: none
+Task: write the merge report
