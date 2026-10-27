@@ -1,11 +1,11 @@
 # Team status
 
-Owner: Tristan
-Note: Claimed the same lines on another branch.
+Owner: Ramon, Tristan
+Note: Both branches edited these lines. Kept both claims.
 Updated: yes
 
 ## Schedule
-Meeting: Monday
+Meeting: Wednesday
 
 ## Tasks
-Task: none
+Task: write the merge report
