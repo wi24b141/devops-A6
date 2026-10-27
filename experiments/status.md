@@ -5,7 +5,7 @@ Note: Set the owner during experiment 1.
 Updated: yes
 
 ## Schedule
-Meeting: Monday
+Meeting: Wednesday
 
 ## Tasks
-Task: none
+Task: write the merge report
