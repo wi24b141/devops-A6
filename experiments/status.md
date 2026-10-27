@@ -1,8 +1,8 @@
 # Team status
 
-Owner: unassigned
-Note: placeholder
-Updated: no
+Owner: Tristan
+Note: Claimed the same lines on another branch.
+Updated: yes
 
 ## Schedule
 Meeting: Monday
