@@ -5,7 +5,7 @@ Note: placeholder
 Updated: no
 
 ## Schedule
-Meeting: Monday
+Meeting: Wednesday
 
 ## Tasks
 Task: write the merge report
