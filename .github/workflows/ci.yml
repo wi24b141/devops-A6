@@ -1,0 +1,35 @@
+name: CI
+
+# push: so the first run on main appears in Actions and registers the check name.
+# pull_request: so every classmate PR gets the same gate.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Read-only. This workflow does not push or create releases.
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build
+        run: bun run build
+
+      - name: Unit tests
+        run: bun run test:unit
+
+      - name: Integration tests
+        run: bun run test:integration
