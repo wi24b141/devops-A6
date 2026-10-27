@@ -1,7 +1,7 @@
 # Team status
 
-Owner: Ramon
-Note: Set the owner during experiment 1.
+Owner: Ramon, Tristan
+Note: Both branches edited these lines. Kept both claims.
 Updated: yes
 
 ## Schedule
