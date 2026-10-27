@@ -1,8 +1,8 @@
 # Team status
 
-Owner: unassigned
-Note: placeholder
-Updated: no
+Owner: Ramon
+Note: Set the owner during experiment 1.
+Updated: yes
 
 ## Schedule
 Meeting: Wednesday
